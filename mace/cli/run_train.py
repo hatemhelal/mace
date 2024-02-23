@@ -505,6 +505,7 @@ def main() -> None:
         swa=swa,
         ema=ema,
         max_grad_norm=args.clip_grad,
+        histogram_dir=args.histogram_dir,
         log_errors=args.error_table,
         log_wandb=args.wandb,
     )

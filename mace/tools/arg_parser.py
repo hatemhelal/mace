@@ -36,6 +36,14 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         "--downloads_dir", help="directory for downloads", type=str, default="downloads"
     )
 
+    parser.add_argument(
+        "--histogram_dir",
+        help="directory for storing model histograms",
+        type=str,
+        default=None,
+        required=False,
+    )
+
     # Device and logging
     parser.add_argument(
         "--device",

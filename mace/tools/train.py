@@ -17,6 +17,7 @@ from torch_ema import ExponentialMovingAverage
 
 from . import torch_geometric
 from .checkpoint import CheckpointHandler, CheckpointState
+from .histogram import HistogramLogger
 from .torch_tools import tensor_dict_to_device, to_numpy
 from .utils import (
     MetricsLogger,
@@ -55,6 +56,7 @@ def train(
     swa: Optional[SWAContainer] = None,
     ema: Optional[ExponentialMovingAverage] = None,
     max_grad_norm: Optional[float] = 10.0,
+    histogram_dir: Optional[str] = None,
     log_wandb: bool = False,
 ):
     lowest_loss = np.inf
@@ -64,6 +66,8 @@ def train(
     keep_last = False
     if log_wandb:
         import wandb
+
+    hist_logger = HistogramLogger(histogram_dir)
 
     if max_grad_norm is not None:
         logging.info(f"Using gradient clipping with tolerance={max_grad_norm:.3f}")
@@ -88,20 +92,22 @@ def train(
                 swa.scheduler.step()
 
         # Train
-        for batch in train_loader:
-            _, opt_metrics = take_step(
-                model=model,
-                loss_fn=loss_fn,
-                batch=batch,
-                optimizer=optimizer,
-                ema=ema,
-                output_args=output_args,
-                max_grad_norm=max_grad_norm,
-                device=device,
-            )
-            opt_metrics["mode"] = "opt"
-            opt_metrics["epoch"] = epoch
-            logger.log(opt_metrics)
+        with hist_logger:
+            for batch in train_loader:
+                _, opt_metrics = take_step(
+                    model=model,
+                    loss_fn=loss_fn,
+                    batch=batch,
+                    optimizer=optimizer,
+                    ema=ema,
+                    output_args=output_args,
+                    max_grad_norm=max_grad_norm,
+                    hist_logger=hist_logger,
+                    device=device,
+                )
+                opt_metrics["mode"] = "opt"
+                opt_metrics["epoch"] = epoch
+                logger.log(opt_metrics)
 
         # Validate
         if epoch % eval_interval == 0:
@@ -233,6 +239,7 @@ def take_step(
     ema: Optional[ExponentialMovingAverage],
     output_args: Dict[str, bool],
     max_grad_norm: Optional[float],
+    hist_logger: Optional[HistogramLogger],
     device: torch.device,
 ) -> Tuple[float, Dict[str, Any]]:
     start_time = time.time()
@@ -248,6 +255,8 @@ def take_step(
     )
     loss = loss_fn(pred=output, ref=batch)
     loss.backward()
+    hist_logger.step(model)
+
     if max_grad_norm is not None:
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
     optimizer.step()
