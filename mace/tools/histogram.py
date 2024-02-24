@@ -1,13 +1,15 @@
 import logging
 import os
 import os.path as osp
-from typing import Any, Optional
+from typing import Any, List, Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.pyplot import Axes
+from matplotlib.animation import FuncAnimation, PillowWriter
 from numpy.typing import NDArray
 from torch.nn import Module
+from tqdm import tqdm
 
 from mace.tools.torch_tools import to_numpy
 
@@ -81,7 +83,7 @@ def module_histogram(module: Module) -> pd.DataFrame:
 
 def plot_histogram(
     data: pd.DataFrame, epoch: int = None, heatmap_kw: dict[str, Any] = {}
-) -> Axes:
+) -> plt.Axes:
     """Plot exponent histogram using seaborn.heatmap
 
     Args:
@@ -107,6 +109,31 @@ def plot_histogram(
         ax.set_title(f"Epoch {epoch}")
 
     return ax
+
+
+def save_histgif(data: List[pd.DataFrame], file: str = "histogram.gif") -> None:
+    """Save a sequence of histograms as an animated gif
+
+    Args:
+        data (List[pd.DataFrame]): the histograms used as frames in the animation
+        file (str, optional): path to save animation. Defaults to "histogram.gif".
+    """
+    gridspec_kw = {"width_ratios": (1.0, 0.025), "wspace": -0.2}
+    fig, (ax, cbar_ax) = plt.subplots(1, 2, figsize=(20, 12), gridspec_kw=gridspec_kw)
+    heatmap_kw = {"ax": ax, "cbar_ax": cbar_ax}
+
+    def func(frame):
+        ax.cla()
+        plot_histogram(data[frame], epoch=frame, heatmap_kw=heatmap_kw)
+
+    bar = tqdm(total=len(data))
+    animation = FuncAnimation(fig, func=func, frames=len(data))
+    animation.save(
+        file,
+        writer=PillowWriter(fps=4),
+        dpi=150,
+        progress_callback=lambda *_: bar.update(),
+    )
 
 
 class HistogramLogger:
