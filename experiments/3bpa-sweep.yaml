@@ -28,6 +28,10 @@
       value: 50
     eval_interval:
       value: 1
+    energy_weight:
+      value: 1.0
+    forces_weight:
+      value: 1000.0
 
     # Data
     train_file:
