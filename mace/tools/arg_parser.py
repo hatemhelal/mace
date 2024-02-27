@@ -470,19 +470,19 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         "--wandb_project",
         help="Weights and Biases project name",
         type=str,
-        default="",
+        default=None,
     )
     parser.add_argument(
         "--wandb_entity",
         help="Weights and Biases entity name",
         type=str,
-        default="",
+        default=None,
     )
     parser.add_argument(
         "--wandb_name",
         help="Weights and Biases experiment name",
         type=str,
-        default="",
+        default=None,
     )
     parser.add_argument(
         "--wandb_log_hypers",
