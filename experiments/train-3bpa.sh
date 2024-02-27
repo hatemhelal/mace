@@ -1,0 +1,37 @@
+mace_run_train \
+    --name="model_fp32" \
+    --default_dtype="float32" \
+    --clip_grad=None \
+    --device=cuda \
+    --lr=0.01 \
+    --train_file="/home/hatemh/BOTNet-datasets/dataset_3BPA/train_300K.xyz" \
+    --test_file="/home/hatemh/BOTNet-datasets/dataset_3BPA/test_300K.xyz" \
+    --valid_fraction=0.05 \
+    --E0s="{6: -1029.4889999855063,1: -13.587222780835477,7: -1484.9814568572233, 8: -2041.9816003861047}" \
+    --energy_key="energy" \
+    --forces_key="forces" \
+    --model="ScaleShiftMACE" \
+    --r_max=5.0 \
+    --num_interactions=2 \
+    --max_ell=3 \
+    --hidden_irreps="256x0e+256x1o+256x2e+256x3o" \
+    --radial_type=bessel \
+    --num_radial_basis=8 \
+    --num_cutoff_basis=5 \
+    --radial_MLP="[64, 64, 64, 1024]"\
+    --MLP_irreps="16x0e" \
+    --correlation=3 \
+    --batch_size=4 \
+    --valid_batch_size=4 \
+    --eval_interval=1 \
+    --energy_weight=1000 \
+    --forces_weight=1000000 \
+    --ema \
+    --ema_decay=0.99 \
+    --amsgrad \
+    --error_table="TotalRMSE" \
+    --seed=1702 \
+    --max_num_epochs=100 \
+    --wandb \
+    --wandb_project="mace-numerics"
+    
