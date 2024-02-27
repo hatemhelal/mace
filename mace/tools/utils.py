@@ -42,6 +42,21 @@ def compute_c(delta: np.ndarray, eta: float) -> float:
     return np.mean(np.abs(delta) < eta).item()
 
 
+def experiment_name(args) -> str:
+    name = "model"
+
+    if args.default_dtype == "float64":
+        name += "_fp64"
+
+    if args.loss_scale != 1.0:
+        name += f"_ls-{args.loss_scale:g}"
+
+    if args.clip_grad is not None:
+        name += f"_cg-{args.clip_grad:g}"
+
+    return name
+
+
 def get_tag(name: str, seed: int) -> str:
     return f"{name}_run-{seed}"
 

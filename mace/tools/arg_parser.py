@@ -301,6 +301,9 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         ],
     )
     parser.add_argument(
+        "--loss_scale", help="Constant loss scale factor", type=float, default=1.0
+    )
+    parser.add_argument(
         "--forces_weight", help="weight of forces loss", type=float, default=100.0
     )
     parser.add_argument(
@@ -500,6 +503,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "start_swa",
             "energy_weight",
             "forces_weight",
+            "loss_scale",
         ],
     )
     return parser

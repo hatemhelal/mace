@@ -1,0 +1,81 @@
+  method: grid
+  parameters:
+    seed:
+      values: [1702, 43, 285]
+    loss_scale:
+      values: [1.0, 1000.0]
+    default_dtype:
+      values: ["float32", "float64"]
+    clip_grad:
+      values: [10.0, "None"]
+
+    # Optimization
+    optimizer:
+      value: "adamw"
+    batch_size:
+      value: 4
+    valid_batch_size:
+      value: 64
+    lr:
+      value: 0.01
+    weight_decay:
+      value: 5e-07
+    amsgrad:
+      value: True
+    ema:
+      value: True
+    max_num_epochs:
+      value: 50
+    eval_interval:
+      value: 1
+
+    # Data
+    train_file:
+      value: "/home/hatemh/BOTNet-datasets/dataset_3BPA/train_300K.xyz"
+    test_file:
+      value: "/home/hatemh/BOTNet-datasets/dataset_3BPA/test_300K.xyz"
+    valid_fraction:
+      value: 0.05
+    E0s:
+      value: "{6: -1029.4889999855063,1: -13.587222780835477,7: -1484.9814568572233, 8: -2041.9816003861047}"
+    error_table:
+      value: "TotalRMSE"
+    
+    # Model
+    model:
+      value: "ScaleShiftMACE"
+    r_max:
+      value: 5.0
+    num_interactions:
+      value: 2
+    max_ell:
+      value: 3
+    hidden_irreps:
+      value: "256x0e+256x1o+256x2e+256x3o"
+    radial_type:
+      value: "bessel"
+    num_radial_basis:
+      value: 8
+    num_cutoff_basis:
+      value: 5
+    radial_MLP:
+      value: "[64, 64, 64, 1024]"
+    MLP_irreps:
+      value: "16x0e"
+    correlation:
+      value: 3
+    gate:
+      value: "silu"
+  
+  program: mace_run_train
+  
+  command:
+    - ${program}
+    - "--name"
+    - "None"
+    - "--device"
+    - "cuda"
+    - "--wandb"
+    - "--wandb_project"
+    - "mace-numerics"
+    - ${args_no_boolean_flags}

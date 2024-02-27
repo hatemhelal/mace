@@ -28,6 +28,10 @@ from mace.tools.scripts_utils import (
 
 def main() -> None:
     args = tools.build_default_arg_parser().parse_args()
+
+    if args.name == "None":
+        args.name = tools.utils.experiment_name(args)
+
     tag = tools.get_tag(name=args.name, seed=args.seed)
 
     # Setup
@@ -39,7 +43,6 @@ def main() -> None:
         logging.info("Cannot find MACE version, please install MACE via pip")
     logging.info(f"Configuration: {args}")
     device = tools.init_device(args.device)
-    tools.set_default_dtype(args.default_dtype)
 
     try:
         config_type_weights = ast.literal_eval(args.config_type_weights)
@@ -149,6 +152,20 @@ def main() -> None:
     )
 
     loss_fn: torch.nn.Module
+
+    if args.loss_scale != 1.0:
+        # Apply loss scaling factor directly to the loss component weights
+        weight_args = [
+            "energy_weight",
+            "forces_weight",
+            "virials_weight",
+            "stress_weight",
+            "dipole_weight",
+        ]
+
+        for w in weight_args:
+            setattr(args, w, args.loss_scale * getattr(args, w))
+
     if args.loss == "weighted":
         loss_fn = modules.WeightedEnergyForcesLoss(
             energy_weight=args.energy_weight, forces_weight=args.forces_weight
@@ -332,6 +349,10 @@ def main() -> None:
         )
     else:
         raise RuntimeError(f"Unknown model: '{args.model}'")
+
+    if args.default_dtype == "float64":
+        tools.set_default_dtype(args.default_dtype)
+        model.double()
 
     model.to(device)
 
