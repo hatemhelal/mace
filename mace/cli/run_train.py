@@ -33,6 +33,7 @@ def main() -> None:
         args.name = tools.utils.experiment_name(args)
 
     tag = tools.get_tag(name=args.name, seed=args.seed)
+    tools.set_default_dtype(args.default_dtype)
 
     # Setup
     tools.set_seeds(args.seed)
@@ -350,9 +351,9 @@ def main() -> None:
     else:
         raise RuntimeError(f"Unknown model: '{args.model}'")
 
-    if args.default_dtype == "float64":
-        tools.set_default_dtype(args.default_dtype)
-        model.double()
+    # if args.default_dtype == "float64":
+    #     tools.set_default_dtype(args.default_dtype)
+    #     model.double()
 
     model.to(device)
 
