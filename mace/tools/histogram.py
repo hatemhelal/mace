@@ -1,6 +1,7 @@
 import logging
 import os
 import os.path as osp
+from functools import partial
 from typing import Any, List, Optional
 
 import matplotlib.pyplot as plt
@@ -9,6 +10,7 @@ import pandas as pd
 from matplotlib.animation import FuncAnimation, PillowWriter
 from numpy.typing import NDArray
 from torch.nn import Module
+from torch.jit import ScriptModule
 from tqdm import tqdm
 
 from mace.tools.torch_tools import to_numpy
@@ -137,7 +139,7 @@ def save_histgif(data: List[pd.DataFrame], file: str = "histogram.gif") -> None:
 
 
 class HistogramLogger:
-    def __init__(self, root_dir: Optional[str] = None):
+    def __init__(self, root_dir: Optional[str] = None, module: Optional[Module] = None):
         """Collect exponent histograms across multiple training steps.
 
         This object should be used as a context manager to aggregate the collected
@@ -158,6 +160,41 @@ class HistogramLogger:
         os.makedirs(root_dir, exist_ok=True)
         self.root_dir = root_dir
         logging.info(f"{self.__class__.__name__} logging to {self.root_dir}")
+
+        self.activations = []
+        if module is not None:
+            self.add_hooks(module)
+
+    def add_hooks(self, module):
+        def keyed_hook(name, module, args, output):
+            if isinstance(output, dict):
+                output = tuple([v for _, v in output.items()])
+
+            if not isinstance(output, tuple):
+                output = (output,)
+
+            for i, out in enumerate(output):
+                counts = expcounts(to_numpy(out), fpbins())
+                self.activations.append((f"{name}[{i}]", counts))
+
+        skipped = []
+        for name, layer in module.named_modules():
+            if isinstance(layer, ScriptModule):
+                skipped.append(name)
+                continue
+
+            if len(name) == 0:
+                name == "root"
+
+            layer.register_forward_hook(partial(keyed_hook, name))
+
+        if len(skipped) > 0:
+            skipped = "\n".join(skipped)
+            msg = (
+                "Cannot collect activation histograms for the following "
+                f"modules since hooks are not supported on ScriptModules\n{skipped}"
+            )
+            logging.warn(msg)
 
     def __enter__(self):
         """Increment the epoch used to aggregate histograms over multiple training steps"""
@@ -182,13 +219,27 @@ class HistogramLogger:
         if self.disable:
             return
 
-        values = np.concatenate([d.values[:, :, None] for d in self.data], axis=2)
-        values = np.sum(values, axis=2)
-        W = np.sum(values, axis=1)
-        density = values / W[:, None]
-        index = self.data[0].index
-        columns = self.data[0].columns
-        data = pd.DataFrame(density, index=index, columns=columns)
-        file = f"{self.root_dir}/ep{self.epoch:04d}.parquet"
-        data.to_parquet(file)
-        self.data = []
+        if len(self.data) == 0 and len(self.activations) == 0:
+            logging.warn("No data!")
+            return
+
+        if len(self.activations) > 0:
+            bins = fpbins()
+            columns = [f"[{bins[n]}, {bins[n+1]})" for n in range(len(bins) - 1)]
+            columns[-1] = columns[-1].replace(")", "]")
+            names, counts = zip(*self.activations)
+            df = pd.DataFrame(np.stack(counts), columns=columns, index=names)
+            self.data.append(df)
+            self.activations = []
+
+        if len(self.data) > 0:
+            values = np.concatenate([d.values[:, :, None] for d in self.data], axis=2)
+            values = np.sum(values, axis=2)
+            W = np.sum(values, axis=1)
+            density = values / W[:, None]
+            index = self.data[0].index
+            columns = self.data[0].columns
+            data = pd.DataFrame(density, index=index, columns=columns)
+            file = f"{self.root_dir}/ep{self.epoch:04d}.parquet"
+            data.to_parquet(file)
+            self.data = []
