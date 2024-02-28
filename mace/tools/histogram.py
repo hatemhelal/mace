@@ -168,14 +168,17 @@ class HistogramLogger:
     def add_hooks(self, module):
         def keyed_hook(name, module, args, output):
             if isinstance(output, dict):
+                name = tuple([f"{name}[{k}]" for k in output.keys()])
                 output = tuple([v for _, v in output.items()])
-
-            if not isinstance(output, tuple):
+            elif isinstance(output, tuple):
+                name = tuple(f"{name}[{i}]" for i in range(len(output)))
+            else:
+                name = (name,)
                 output = (output,)
 
-            for i, out in enumerate(output):
+            for n, out in zip(name, output):
                 counts = expcounts(to_numpy(out), fpbins())
-                self.activations.append((f"{name}[{i}]", counts))
+                self.activations.append((n, counts))
 
         skipped = []
         for name, layer in module.named_modules():
