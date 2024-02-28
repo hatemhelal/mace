@@ -15,7 +15,7 @@
     batch_size:
       value: 4
     valid_batch_size:
-      value: 64
+      value: 4
     lr:
       value: 0.01
     weight_decay:
