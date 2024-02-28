@@ -17,6 +17,7 @@ from torch_ema import ExponentialMovingAverage
 
 from . import torch_geometric
 from .checkpoint import CheckpointHandler, CheckpointState
+from .histogram import HistogramLogger
 from .torch_tools import tensor_dict_to_device, to_numpy
 from .utils import (
     MetricsLogger,
@@ -55,6 +56,7 @@ def train(
     swa: Optional[SWAContainer] = None,
     ema: Optional[ExponentialMovingAverage] = None,
     max_grad_norm: Optional[float] = 10.0,
+    histogram_dir: Optional[str] = None,
     log_wandb: bool = False,
 ):
     lowest_loss = np.inf
@@ -65,10 +67,30 @@ def train(
     if log_wandb:
         import wandb
 
+    hist_logger = HistogramLogger(histogram_dir)
+
     if max_grad_norm is not None:
         logging.info(f"Using gradient clipping with tolerance={max_grad_norm:.3f}")
     logging.info("Started training")
     epoch = start_epoch
+    if epoch == 0:
+        valid_loss, eval_metrics = evaluate(
+            model=model,
+            loss_fn=loss_fn,
+            data_loader=valid_loader,
+            output_args=output_args,
+            device=device,
+        )
+        eval_metrics["mode"] = "eval"
+        # Error AFTER first epoch is reported as "epoch 0", so we report here as "epoch -1"
+        eval_metrics["epoch"] = -1
+        logger.log(eval_metrics)
+        log_errors_to_terminal(
+            epoch=-1,
+            eval_metrics=eval_metrics,
+            log_errors=log_errors,
+            valid_loss=valid_loss
+        )
     while epoch < max_num_epochs:
         # LR scheduler and SWA update
         if swa is None or epoch < swa.start:
@@ -88,20 +110,22 @@ def train(
                 swa.scheduler.step()
 
         # Train
-        for batch in train_loader:
-            _, opt_metrics = take_step(
-                model=model,
-                loss_fn=loss_fn,
-                batch=batch,
-                optimizer=optimizer,
-                ema=ema,
-                output_args=output_args,
-                max_grad_norm=max_grad_norm,
-                device=device,
-            )
-            opt_metrics["mode"] = "opt"
-            opt_metrics["epoch"] = epoch
-            logger.log(opt_metrics)
+        with hist_logger:
+            for batch in train_loader:
+                _, opt_metrics = take_step(
+                    model=model,
+                    loss_fn=loss_fn,
+                    batch=batch,
+                    optimizer=optimizer,
+                    ema=ema,
+                    output_args=output_args,
+                    max_grad_norm=max_grad_norm,
+                    hist_logger=hist_logger,
+                    device=device,
+                )
+                opt_metrics["mode"] = "opt"
+                opt_metrics["epoch"] = epoch
+                logger.log(opt_metrics)
 
         # Validate
         if epoch % eval_interval == 0:
@@ -125,62 +149,8 @@ def train(
             eval_metrics["mode"] = "eval"
             eval_metrics["epoch"] = epoch
             logger.log(eval_metrics)
-            if log_errors == "PerAtomRMSE":
-                error_e = eval_metrics["rmse_e_per_atom"] * 1e3
-                error_f = eval_metrics["rmse_f"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A"
-                )
-            elif (
-                log_errors == "PerAtomRMSEstressvirials"
-                and eval_metrics["rmse_stress_per_atom"] is not None
-            ):
-                error_e = eval_metrics["rmse_e_per_atom"] * 1e3
-                error_f = eval_metrics["rmse_f"] * 1e3
-                error_stress = eval_metrics["rmse_stress_per_atom"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_stress_per_atom={error_stress:.1f} meV / A^3"
-                )
-            elif (
-                log_errors == "PerAtomRMSEstressvirials"
-                and eval_metrics["rmse_virials_per_atom"] is not None
-            ):
-                error_e = eval_metrics["rmse_e_per_atom"] * 1e3
-                error_f = eval_metrics["rmse_f"] * 1e3
-                error_virials = eval_metrics["rmse_virials_per_atom"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_virials_per_atom={error_virials:.1f} meV"
-                )
-            elif log_errors == "TotalRMSE":
-                error_e = eval_metrics["rmse_e"] * 1e3
-                error_f = eval_metrics["rmse_f"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A"
-                )
-            elif log_errors == "PerAtomMAE":
-                error_e = eval_metrics["mae_e_per_atom"] * 1e3
-                error_f = eval_metrics["mae_f"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, MAE_E_per_atom={error_e:.1f} meV, MAE_F={error_f:.1f} meV / A"
-                )
-            elif log_errors == "TotalMAE":
-                error_e = eval_metrics["mae_e"] * 1e3
-                error_f = eval_metrics["mae_f"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, MAE_E={error_e:.1f} meV, MAE_F={error_f:.1f} meV / A"
-                )
-            elif log_errors == "DipoleRMSE":
-                error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_MU_per_atom={error_mu:.2f} mDebye"
-                )
-            elif log_errors == "EnergyDipoleRMSE":
-                error_e = eval_metrics["rmse_e_per_atom"] * 1e3
-                error_f = eval_metrics["rmse_f"] * 1e3
-                error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
-                logging.info(
-                    f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_Mu_per_atom={error_mu:.2f} mDebye"
-                )
+            log_errors_to_terminal(epoch, eval_metrics, log_errors, valid_loss)
+            
             if log_wandb:
                 wandb_log_dict = {
                     "epoch": epoch,
@@ -233,6 +203,7 @@ def take_step(
     ema: Optional[ExponentialMovingAverage],
     output_args: Dict[str, bool],
     max_grad_norm: Optional[float],
+    hist_logger: Optional[HistogramLogger],
     device: torch.device,
 ) -> Tuple[float, Dict[str, Any]]:
     start_time = time.time()
@@ -248,6 +219,8 @@ def take_step(
     )
     loss = loss_fn(pred=output, ref=batch)
     loss.backward()
+    hist_logger.step(model)
+
     if max_grad_norm is not None:
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
     optimizer.step()
@@ -390,3 +363,62 @@ def evaluate(
     aux["time"] = time.time() - start_time
 
     return avg_loss, aux
+
+def log_errors_to_terminal(epoch, eval_metrics, log_errors, valid_loss):
+
+    if log_errors == "PerAtomRMSE":
+        error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        error_f = eval_metrics["rmse_f"] * 1e3
+        logging.info(
+            f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A"
+        )
+    elif (
+        log_errors == "PerAtomRMSEstressvirials"
+        and eval_metrics["rmse_stress_per_atom"] is not None
+    ):
+        error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        error_f = eval_metrics["rmse_f"] * 1e3
+        error_stress = eval_metrics["rmse_stress_per_atom"] * 1e3
+        logging.info(
+            f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_stress_per_atom={error_stress:.1f} meV / A^3"
+        )
+    elif (
+        log_errors == "PerAtomRMSEstressvirials"
+        and eval_metrics["rmse_virials_per_atom"] is not None
+    ):
+        error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        error_f = eval_metrics["rmse_f"] * 1e3
+        error_virials = eval_metrics["rmse_virials_per_atom"] * 1e3
+        logging.info(
+            f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_virials_per_atom={error_virials:.1f} meV"
+        )
+    elif log_errors == "TotalRMSE":
+        error_e = eval_metrics["rmse_e"] * 1e3
+        error_f = eval_metrics["rmse_f"] * 1e3
+        logging.info(
+            f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A"
+        )
+    elif log_errors == "PerAtomMAE":
+        error_e = eval_metrics["mae_e_per_atom"] * 1e3
+        error_f = eval_metrics["mae_f"] * 1e3
+        logging.info(
+            f"Epoch {epoch}: loss={valid_loss:.4f}, MAE_E_per_atom={error_e:.1f} meV, MAE_F={error_f:.1f} meV / A"
+        )
+    elif log_errors == "TotalMAE":
+        error_e = eval_metrics["mae_e"] * 1e3
+        error_f = eval_metrics["mae_f"] * 1e3
+        logging.info(
+            f"Epoch {epoch}: loss={valid_loss:.4f}, MAE_E={error_e:.1f} meV, MAE_F={error_f:.1f} meV / A"
+        )
+    elif log_errors == "DipoleRMSE":
+        error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
+        logging.info(
+            f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_MU_per_atom={error_mu:.2f} mDebye"
+        )
+    elif log_errors == "EnergyDipoleRMSE":
+        error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        error_f = eval_metrics["rmse_f"] * 1e3
+        error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
+        logging.info(
+            f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A, RMSE_Mu_per_atom={error_mu:.2f} mDebye"
+        )
