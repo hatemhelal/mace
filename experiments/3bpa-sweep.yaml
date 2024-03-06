@@ -25,7 +25,7 @@
     ema:
       value: True
     max_num_epochs:
-      value: 100
+      value: 300
     eval_interval:
       value: 1
     energy_weight:
@@ -82,4 +82,5 @@
     - "--wandb"
     - "--wandb_project"
     - "mace-numerics"
+    - "--restart_latest"
     - ${args_no_boolean_flags}
