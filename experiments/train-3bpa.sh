@@ -1,5 +1,5 @@
 mace_run_train \
-    --name="model_fp32" \
+    --name="sanity" \
     --default_dtype="float32" \
     --clip_grad=None \
     --device=cuda \
@@ -24,14 +24,13 @@ mace_run_train \
     --batch_size=4 \
     --valid_batch_size=4 \
     --eval_interval=1 \
-    --energy_weight=1000 \
-    --forces_weight=1000000 \
+    --loss="weighted_interaction" \
+    --energy_weight=1 \
+    --forces_weight=1000 \
     --ema \
     --ema_decay=0.99 \
     --amsgrad \
     --error_table="TotalRMSE" \
     --seed=1702 \
-    --max_num_epochs=100 \
-    --wandb \
-    --wandb_project="mace-numerics"
+    --max_num_epochs=100
     
