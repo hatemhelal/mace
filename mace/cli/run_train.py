@@ -171,6 +171,12 @@ def main() -> None:
         loss_fn = modules.WeightedEnergyForcesLoss(
             energy_weight=args.energy_weight, forces_weight=args.forces_weight
         )
+    elif args.loss == "weighted_interaction":
+        loss_fn = modules.loss.WeightedInteractionEnergyForcesLoss(
+            atomic_energies,
+            interaction_energy_weight=args.energy_weight,
+            forces_weight=args.forces_weight,
+        )
     elif args.loss == "forces_only":
         loss_fn = modules.WeightedForcesLoss(forces_weight=args.forces_weight)
     elif args.loss == "virials":
@@ -208,7 +214,9 @@ def main() -> None:
         )
     else:
         # Unweighted Energy and Forces loss by default
-        loss_fn = modules.WeightedEnergyForcesLoss(energy_weight=args.loss_scale, forces_weight=args.loss_scale)
+        loss_fn = modules.WeightedEnergyForcesLoss(
+            energy_weight=args.loss_scale, forces_weight=args.loss_scale
+        )
     logging.info(loss_fn)
 
     if args.compute_avg_num_neighbors:
@@ -351,11 +359,8 @@ def main() -> None:
     else:
         raise RuntimeError(f"Unknown model: '{args.model}'")
 
-    # if args.default_dtype == "float64":
-    #     tools.set_default_dtype(args.default_dtype)
-    #     model.double()
-
     model.to(device)
+    loss_fn.to(device)
 
     # Optimizer
     decay_interactions = {}

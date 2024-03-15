@@ -8,6 +8,9 @@ import torch
 
 from mace.tools import TensorDict
 from mace.tools.torch_geometric import Batch
+from mace.tools.scatter import scatter_sum
+from numpy.typing import NDArray
+from mace.modules.blocks import AtomicEnergiesBlock
 
 
 def mean_squared_error_energy(ref: Batch, pred: TensorDict) -> torch.Tensor:
@@ -55,14 +58,10 @@ def mean_squared_error_forces(ref: Batch, pred: TensorDict) -> torch.Tensor:
     # forces: [n_atoms, 3]
     configs_weight = torch.repeat_interleave(
         ref.weight, ref.ptr[1:] - ref.ptr[:-1]
-    ).unsqueeze(
-        -1
-    )  # [n_atoms, 1]
+    ).unsqueeze(-1)  # [n_atoms, 1]
     configs_forces_weight = torch.repeat_interleave(
         ref.forces_weight, ref.ptr[1:] - ref.ptr[:-1]
-    ).unsqueeze(
-        -1
-    )  # [n_atoms, 1]
+    ).unsqueeze(-1)  # [n_atoms, 1]
     return torch.mean(
         configs_weight
         * configs_forces_weight
@@ -75,6 +74,37 @@ def weighted_mean_squared_error_dipole(ref: Batch, pred: TensorDict) -> torch.Te
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).unsqueeze(-1)  # [n_graphs,1]
     return torch.mean(torch.square((ref["dipole"] - pred["dipole"]) / num_atoms))  # []
     # return torch.mean(torch.square((torch.reshape(ref['dipole'], pred["dipole"].shape) - pred['dipole']) / num_atoms))  # []
+
+
+class WeightedInteractionEnergyForcesLoss(torch.nn.Module):
+    def __init__(
+        self,
+        atomic_energies: NDArray,
+        interaction_energy_weight: float = 1.0,
+        forces_weight: float = 1.0,
+    ) -> None:
+        super().__init__()
+        self.register_buffer(
+            "energy_weight",
+            torch.tensor(interaction_energy_weight, dtype=torch.get_default_dtype()),
+        )
+        self.register_buffer(
+            "forces_weight",
+            torch.tensor(forces_weight, dtype=torch.get_default_dtype()),
+        )
+        self.atom_energies_fn = AtomicEnergiesBlock(atomic_energies)
+
+    def forward(self, ref: Batch, pred: TensorDict) -> torch.Tensor:
+        num_graphs = ref["ptr"].numel() - 1
+        # Atomic energies
+        node_e0 = self.atom_energies_fn(ref["node_attrs"])
+        e0 = scatter_sum(
+            src=node_e0, index=ref["batch"], dim=-1, dim_size=num_graphs
+        )  # [n_graphs,]
+
+        return self.energy_weight * torch.mean(
+            (pred["interaction_energy"] - ref["energy"] + e0) ** 2
+        ) + self.forces_weight * mean_squared_error_forces(ref, pred)
 
 
 class WeightedEnergyForcesLoss(torch.nn.Module):
