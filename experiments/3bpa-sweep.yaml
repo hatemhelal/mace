@@ -25,13 +25,16 @@
     ema:
       value: True
     max_num_epochs:
-      value: 900
+      value: 400
     eval_interval:
       value: 1
     energy_weight:
       value: 1.0
     forces_weight:
       value: 1000.0
+
+    loss:
+      value: "weighted_interaction"
 
     # Data
     train_file:
@@ -82,5 +85,5 @@
     - "--wandb"
     - "--wandb_project"
     - "mace-numerics"
-    - "--restart_latest"
+    # - "--restart_latest"
     - ${args_no_boolean_flags}
