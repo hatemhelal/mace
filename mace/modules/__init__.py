@@ -66,6 +66,7 @@ gate_dict: Dict[str, Optional[Callable]] = {
     "abs": torch.abs,
     "tanh": torch.tanh,
     "silu": torch.nn.functional.silu,
+    "softplus": torch.nn.functional.softplus,
     "None": None,
 }
 

@@ -371,7 +371,7 @@ class AgnosticNonlinearInteractionBlock(InteractionBlock):
         input_dim = self.edge_feats_irreps.num_irreps
         self.conv_tp_weights = nn.FullyConnectedNet(
             [input_dim] + self.radial_MLP + [self.conv_tp.weight_numel],
-            torch.nn.functional.silu,
+            torch.nn.functional.softplus,
         )
 
         # Linear
@@ -438,7 +438,7 @@ class AgnosticResidualNonlinearInteractionBlock(InteractionBlock):
         input_dim = self.edge_feats_irreps.num_irreps
         self.conv_tp_weights = nn.FullyConnectedNet(
             [input_dim] + self.radial_MLP + [self.conv_tp.weight_numel],
-            torch.nn.functional.silu,
+            torch.nn.functional.softplus,
         )
 
         # Linear
@@ -508,7 +508,7 @@ class RealAgnosticInteractionBlock(InteractionBlock):
         input_dim = self.edge_feats_irreps.num_irreps
         self.conv_tp_weights = nn.FullyConnectedNet(
             [input_dim] + self.radial_MLP + [self.conv_tp.weight_numel],
-            torch.nn.functional.silu,
+            torch.nn.functional.softplus,
         )
 
         # Linear
@@ -580,7 +580,7 @@ class RealAgnosticResidualInteractionBlock(InteractionBlock):
         input_dim = self.edge_feats_irreps.num_irreps
         self.conv_tp_weights = nn.FullyConnectedNet(
             [input_dim] + self.radial_MLP + [self.conv_tp.weight_numel],
-            torch.nn.functional.silu,
+            torch.nn.functional.softplus,
         )
 
         # Linear
@@ -662,7 +662,7 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         )
         self.conv_tp_weights = nn.FullyConnectedNet(
             [input_dim] + 3 * [256] + [self.conv_tp.weight_numel],
-            torch.nn.functional.silu,
+            torch.nn.functional.softplus,
         )
 
         # Linear
